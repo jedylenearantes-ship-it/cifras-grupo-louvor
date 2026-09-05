@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cifras — Grupo de Louvor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600&family=Space+Mono:wght@400;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FAF6EE;
+    --paper-2:#F2ECDD;
+    --ink:#2B2116;
+    --ink-soft:#5C5142;
+    --burgundy:#7A2E2E;
+    --burgundy-dark:#5C2222;
+    --gold:#A8823C;
+    --line:#DDD3BE;
+    --danger:#A3372B;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Source Sans 3', sans-serif;
+    min-height:100vh;
+  }
+  header{
+    padding:24px 20px 18px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  header h1{
+    font-family:'Lora', serif;
+    font-weight:600;
+    font-size:26px;
+    margin:0 0 4px;
+    color:var(--burgundy-dark);
+  }
+  header p{
+    margin:0;
+    font-size:14px;
+    color:var(--ink-soft);
+  }
+  .header-actions{display:flex;gap:8px;flex-shrink:0;}
+  .layout{
+    display:flex;
+    flex-direction:column;
+    max-width:1050px;
+    margin:0 auto;
+  }
+  @media(min-width:800px){
+    .layout{flex-direction:row;align-items:flex-start;}
+    .sidebar{width:300px;flex-shrink:0;border-right:1px solid var(--line);min-height:calc(100vh - 100px);}
+    .main{flex:1;}
+  }
+  .sidebar{padding:16px 20px;}
+  .main{padding:16px 20px 60px;}
+
+  .search-box{
+    display:flex;
+    align-items:center;
+    border:1px solid var(--line);
+    border-radius:6px;
+    background:#fff;
+    padding:8px 12px;
+    margin-bottom:14px;
+  }
+  .search-box input{
+    border:none;
+    outline:none;
+    font-size:15px;
+    width:100%;
+    background:transparent;
+    color:var(--ink);
+    font-family:inherit;
+  }
+  .add-btn{
+    width:100%;
+    padding:10px 14px;
+    background:var(--burgundy);
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    margin-bottom:10px;
+    font-family:inherit;
+  }
+  .add-btn:hover{background:var(--burgundy-dark);}
+
+  .summary-btn{
+    width:100%;
+    padding:9px 14px;
+    background:none;
+    border:1px solid var(--line);
+    color:var(--ink-soft);
+    border-radius:6px;
+    font-size:14px;
+    cursor:pointer;
+    margin-bottom:18px;
+    font-family:inherit;
+  }
+  .summary-btn:hover{border-color:var(--burgundy);color:var(--burgundy);}
+
+  .cat-group{margin-bottom:4px;}
+  .cat-label{
+    font-size:11px;
+    letter-spacing:.02em;
+    color:var(--gold);
+    font-weight:600;
+    margin:16px 0 4px;
+    padding:0 10px;
+  }
+  .cat-label:first-child{margin-top:0;}
+
+  .song-list{list-style:none;margin:0;padding:0;}
+  .song-item{
+    padding:11px 10px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+  }
+  .song-item:hover{background:var(--paper-2);}
+  .song-item.active{background:var(--paper-2);border-left:3px solid var(--burgundy);padding-left:7px;}
+  .song-item-title{font-size:15px;font-weight:500;}
+  .song-item-key{font-size:12px;color:var(--gold);font-family:'Space Mono', monospace;flex-shrink:0;}
+  .empty-list{color:var(--ink-soft);font-size:14px;padding:10px;}
+
+  .placeholder{
+    color:var(--ink-soft);
+    font-size:15px;
+    padding-top:40px;
+    text-align:center;
+  }
+
+  .cifra-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:12px;
+    margin-bottom:6px;
+    flex-wrap:wrap;
+  }
+  .cifra-title{
+    font-family:'Lora', serif;
+    font-weight:600;
+    font-size:24px;
+    margin:0;
+    color:var(--burgundy-dark);
+  }
+  .cifra-meta{
+    font-size:13px;
+    color:var(--gold);
+    font-family:'Space Mono', monospace;
+    margin:4px 0 0;
+  }
+  .cifra-actions{display:flex;gap:8px;flex-shrink:0;}
+  .icon-btn{
+    background:none;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:6px 12px;
+    font-size:13px;
+    cursor:pointer;
+    color:var(--ink-soft);
+    font-family:inherit;
+  }
+  .icon-btn:hover{border-color:var(--burgundy);color:var(--burgundy);}
+  .icon-btn.danger:hover{border-color:var(--danger);color:var(--danger);}
+
+  .cifra-body{
+    white-space:pre-wrap;
+    font-family:'Space Mono', monospace;
+    font-size:14px;
+    line-height:1.8;
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:18px 20px;
+    margin-top:16px;
+    overflow-x:auto;
+  }
+
+  .form-wrap{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:18px 20px;
+  }
+  .form-wrap h2{
+    font-family:'Lora', serif;
+    font-weight:600;
+    font-size:19px;
+    margin:0 0 16px;
+    color:var(--burgundy-dark);
+  }
+  .field{margin-bottom:14px;}
+  .field label{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink-soft);
+    margin-bottom:5px;
+  }
+  .field input, .field textarea, .field select{
+    width:100%;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:9px 11px;
+    font-size:14px;
+    font-family:inherit;
+    color:var(--ink);
+    background:var(--paper);
+  }
+  .field textarea{
+    font-family:'Space Mono', monospace;
+    font-size:13.5px;
+    line-height:1.7;
+    min-height:220px;
+    resize:vertical;
+  }
+  .two-col{display:flex;gap:12px;}
+  .two-col .field{flex:1;}
+  .import-box{
+    background:var(--paper-2);
+    border:1px dashed var(--line);
+    border-radius:8px;
+    padding:14px 14px 4px;
+    margin-bottom:14px;
+  }
+  .import-row{display:flex;gap:8px;}
+  .import-row input{flex:1;}
+  .import-status{font-size:12.5px;color:var(--ink-soft);margin-top:6px;min-height:16px;}
+  .import-status.error{color:var(--danger);}
+  .import-status.ok{color:var(--burgundy);}
+  input[type="file"]{
+    font-size:13px;
+    color:var(--ink-soft);
+  }
+  .field-error{color:var(--danger);font-size:13px;margin-top:5px;}
+  .form-actions{display:flex;gap:10px;margin-top:6px;}
+  .btn-primary{
+    background:var(--burgundy);
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    padding:10px 18px;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .btn-primary:hover{background:var(--burgundy-dark);}
+  .btn-secondary{
+    background:none;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:10px 18px;
+    font-size:14px;
+    cursor:pointer;
+    color:var(--ink-soft);
+    font-family:inherit;
+  }
+  .status-msg{font-size:13px;color:var(--ink-soft);margin-top:10px;}
+  .status-msg.error{color:var(--danger);}
+
+  .summary-title{
+    font-family:'Lora', serif;
+    font-weight:600;
+    font-size:22px;
+    margin:0 0 4px;
+    color:var(--burgundy-dark);
+  }
+  .summary-sub{font-size:13px;color:var(--ink-soft);margin:0 0 20px;}
+  .summary-cat{margin-bottom:22px;}
+  .summary-cat h3{
+    font-family:'Lora', serif;
+    font-size:16px;
+    font-weight:600;
+    color:var(--gold);
+    margin:0 0 8px;
+    border-bottom:1px solid var(--line);
+    padding-bottom:6px;
+  }
+  .summary-row{
+    display:flex;
+    justify-content:space-between;
+    padding:7px 2px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    font-size:14px;
+  }
+  .summary-row:hover{color:var(--burgundy);}
+  .summary-row span:last-child{color:var(--ink-soft);font-family:'Space Mono', monospace;font-size:12px;}
+  .summary-empty{font-size:14px;color:var(--ink-soft);}
+
+  #printArea{display:none;}
+
+  @media print{
+    header, .layout > .sidebar, .header-actions{display:none !important;}
+    body, .layout, .main{background:#fff !important;padding:0;margin:0;max-width:none;}
+    #printArea{display:block !important;}
+    #mainArea{display:none !important;}
+    .print-song{page-break-before:always;padding:24px;}
+    .print-summary{padding:24px;}
+    .print-title{font-family:'Lora', serif;font-size:22px;color:#000;margin:0 0 2px;}
+    .print-meta{font-family:'Space Mono', monospace;font-size:12px;color:#555;margin:0 0 14px;}
+    .print-body{white-space:pre-wrap;font-family:'Space Mono', monospace;font-size:13px;line-height:1.7;color:#000;}
+    .print-summary h1{font-family:'Lora', serif;font-size:24px;margin:0 0 18px;color:#000;}
+    .print-summary h2{font-family:'Lora', serif;font-size:15px;margin:18px 0 6px;color:#000;border-bottom:1px solid #ccc;padding-bottom:4px;}
+    .print-summary-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;color:#000;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Cifras — Grupo de Louvor</h1>
+    <p>Pasta compartilhada. Todos que abrirem este link veem as mesmas cifras.</p>
+  </div>
+  <div class="header-actions">
+    <button class="icon-btn" id="exportBtn">Exportar tudo em PDF</button>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Buscar por nome...">
+    </div>
+    <button class="add-btn" id="newSongBtn">+ Adicionar nova cifra</button>
+    <button class="summary-btn" id="summaryBtn">Ver sumário</button>
+    <div id="songList"></div>
+  </div>
+  <div class="main" id="mainArea">
+    <div class="placeholder">Selecione uma cifra na lista, veja o sumário, ou adicione uma nova.</div>
+  </div>
+</div>
+
+<div id="printArea"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+async function extractPdfText(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const content = await page.getTextContent();
+    let lastY = null;
+    let line = '';
+    content.items.forEach(item => {
+      const y = item.transform[5];
+      if (lastY !== null && Math.abs(y - lastY) > 2) {
+        fullText += line + '\n';
+        line = '';
+      }
+      line += item.str;
+      lastY = y;
+    });
+    fullText += line + '\n\n';
+  }
+  return fullText;
+}
+
+const CATEGORIES = ['Crianças', 'Jovens', 'Irmãs', 'Gerais', 'Ceia'];
+
+let songs = [];
+let loaded = false;
+let currentView = { mode: 'placeholder' };
+
+const API_URL = 'https://script.google.com/macros/s/AKfycbweiyOXAIJEcyOGtMfp1P2p6gJY_twOodMsA43jz6ycwkwTpnTyEIGbEdS4moqGWa5bbg/exec';
+
+async function loadSongs() {
+  try {
+    const res = await fetch(API_URL);
+    const data = await res.json();
+    songs = Array.isArray(data) ? data : [];
+    loaded = true;
+  } catch (e) {
+    songs = [];
+    loaded = false;
+  }
+  renderList();
+}
+
+async function saveSongs() {
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(songs)
+    });
+    const data = await res.json();
+    return !!data.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+function catLabel(cat) {
+  return CATEGORIES.includes(cat) ? cat : 'Gerais';
+}
+
+function renderList() {
+  const container = document.getElementById('songList');
+  const query = (document.getElementById('searchInput').value || '').toLowerCase();
+  container.innerHTML = '';
+
+  let any = false;
+  CATEGORIES.forEach(cat => {
+    const inCat = songs
+      .filter(s => catLabel(s.category) === cat && s.title.toLowerCase().includes(query))
+      .sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
+    if (inCat.length === 0) return;
+    any = true;
+
+    const label = document.createElement('div');
+    label.className = 'cat-label';
+    label.textContent = cat;
+    container.appendChild(label);
+
+    const ul = document.createElement('ul');
+    ul.className = 'song-list';
+    inCat.forEach(song => {
+      const li = document.createElement('li');
+      li.className = 'song-item' + (currentView.id === song.id ? ' active' : '');
+      li.innerHTML = '<span class="song-item-title"></span><span class="song-item-key"></span>';
+      li.querySelector('.song-item-title').textContent = song.title;
+      li.querySelector('.song-item-key').textContent = song.key || '';
+      li.addEventListener('click', () => showSong(song.id));
+      ul.appendChild(li);
+    });
+    container.appendChild(ul);
+  });
+
+  if (!any) {
+    const div = document.createElement('div');
+    div.className = 'empty-list';
+    if (!loaded) {
+      div.textContent = 'Carregando...';
+    } else {
+      div.textContent = songs.length === 0 ? 'Nenhuma cifra ainda.' : 'Nada encontrado.';
+    }
+    container.appendChild(div);
+  }
+}
+
+function showSong(id) {
+  const song = songs.find(s => s.id === id);
+  if (!song) return;
+  currentView = { mode: 'view', id: id };
+  renderList();
+  renderMain();
+}
+
+function showNewForm() {
+  currentView = { mode: 'new' };
+  renderList();
+  renderMain();
+}
+
+function showEditForm(id) {
+  currentView = { mode: 'edit', id: id };
+  renderList();
+  renderMain();
+}
+
+function showSummary() {
+  currentView = { mode: 'summary' };
+  renderList();
+  renderMain();
+}
+
+function renderMain() {
+  const main = document.getElementById('mainArea');
+
+  if (currentView.mode === 'placeholder') {
+    main.innerHTML = '<div class="placeholder">Selecione uma cifra na lista, veja o sumário, ou adicione uma nova.</div>';
+    return;
+  }
+
+  if (currentView.mode === 'summary') {
+    main.innerHTML = '';
+    const title = document.createElement('h2');
+    title.className = 'summary-title';
+    title.textContent = 'Sumário';
+    main.appendChild(title);
+    const sub = document.createElement('p');
+    sub.className = 'summary-sub';
+    sub.textContent = songs.length + (songs.length === 1 ? ' cifra cadastrada' : ' cifras cadastradas');
+    main.appendChild(sub);
+
+    let hasAny = false;
+    CATEGORIES.forEach(cat => {
+      const inCat = songs.filter(s => catLabel(s.category) === cat).sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
+      if (inCat.length === 0) return;
+      hasAny = true;
+      const block = document.createElement('div');
+      block.className = 'summary-cat';
+      const h3 = document.createElement('h3');
+      h3.textContent = cat;
+      block.appendChild(h3);
+      inCat.forEach(song => {
+        const row = document.createElement('div');
+        row.className = 'summary-row';
+        row.innerHTML = '<span></span><span></span>';
+        row.querySelector('span:first-child').textContent = song.title;
+        row.querySelector('span:last-child').textContent = song.key || '';
+        row.addEventListener('click', () => showSong(song.id));
+        block.appendChild(row);
+      });
+      main.appendChild(block);
+    });
+
+    if (!hasAny) {
+      const empty = document.createElement('p');
+      empty.className = 'summary-empty';
+      empty.textContent = 'Nenhuma cifra cadastrada ainda.';
+      main.appendChild(empty);
+    }
+    return;
+  }
+
+  if (currentView.mode === 'view') {
+    const song = songs.find(s => s.id === currentView.id);
+    if (!song) { currentView = { mode: 'placeholder' }; renderMain(); return; }
+    main.innerHTML = '';
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'cifra-header';
+    headerDiv.innerHTML =
+      '<div><h2 class="cifra-title"></h2><p class="cifra-meta"></p></div>' +
+      '<div class="cifra-actions"><button class="icon-btn" id="editBtn">Editar</button><button class="icon-btn danger" id="delBtn">Excluir</button></div>';
+    headerDiv.querySelector('.cifra-title').textContent = song.title;
+    const metaParts = [catLabel(song.category)];
+    if (song.key) metaParts.push('Tom: ' + song.key);
+    headerDiv.querySelector('.cifra-meta').textContent = metaParts.join(' · ');
+    main.appendChild(headerDiv);
+
+    const body = document.createElement('div');
+    body.className = 'cifra-body';
+    body.textContent = song.body;
+    main.appendChild(body);
+
+    document.getElementById('editBtn').addEventListener('click', () => showEditForm(song.id));
+    document.getElementById('delBtn').addEventListener('click', async () => {
+      if (confirm('Excluir "' + song.title + '"? Isso remove a cifra para todo o grupo.')) {
+        songs = songs.filter(s => s.id !== song.id);
+        const ok = await saveSongs();
+        currentView = { mode: 'placeholder' };
+        renderList();
+        renderMain();
+        if (!ok) alert('Não foi possível salvar a exclusão. Tente novamente.');
+      }
+    });
+    return;
+  }
+
+  if (currentView.mode === 'new' || currentView.mode === 'edit') {
+    const editing = currentView.mode === 'edit';
+    const song = editing ? songs.find(s => s.id === currentView.id) : null;
+    const options = CATEGORIES.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+    main.innerHTML =
+      '<div class="form-wrap">' +
+      '<h2>' + (editing ? 'Editar cifra' : 'Nova cifra') + '</h2>' +
+      '<div class="field"><label>Nome da música</label><input type="text" id="titleInput"></div>' +
+      '<div class="two-col">' +
+      '<div class="field"><label>Categoria</label><select id="catInput">' + options + '</select></div>' +
+      '<div class="field"><label>Tom (opcional)</label><input type="text" id="keyInput" placeholder="Ex: G, D, C#m"></div>' +
+      '</div>' +
+      '<div class="import-box">' +
+      '<div class="field"><label>Importar de um link do Cifra Club (opcional)</label>' +
+      '<div class="import-row"><input type="text" id="ccUrlInput" placeholder="https://www.cifraclub.com.br/..."><button type="button" class="btn-secondary" id="ccFetchBtn">Buscar</button></div>' +
+      '<div class="import-status" id="ccStatus"></div></div>' +
+      '<div class="field"><label>Ou importar de um PDF (opcional)</label>' +
+      '<input type="file" id="pdfInput" accept="application/pdf">' +
+      '<div class="import-status" id="pdfStatus"></div></div>' +
+      '</div>' +
+      '<div class="field"><label>Cifra</label><textarea id="bodyInput" placeholder="Cole aqui a cifra, com os acordes acima da letra, ou use um dos importadores acima"></textarea><div class="field-error" id="formError"></div></div>' +
+      '<div class="form-actions"><button class="btn-primary" id="saveBtn">Salvar</button><button class="btn-secondary" id="cancelBtn">Cancelar</button></div>' +
+      '<div class="status-msg" id="statusMsg"></div>' +
+      '</div>';
+
+    if (editing && song) {
+      document.getElementById('titleInput').value = song.title;
+      document.getElementById('catInput').value = catLabel(song.category);
+      document.getElementById('keyInput').value = song.key || '';
+      document.getElementById('bodyInput').value = song.body;
+    } else {
+      document.getElementById('catInput').value = 'Gerais';
+    }
+
+    document.getElementById('ccFetchBtn').addEventListener('click', async () => {
+      const url = document.getElementById('ccUrlInput').value.trim();
+      const statusEl = document.getElementById('ccStatus');
+      if (!url) {
+        statusEl.textContent = 'Cole o link do Cifra Club primeiro.';
+        statusEl.className = 'import-status error';
+        return;
+      }
+      statusEl.textContent = 'Buscando...';
+      statusEl.className = 'import-status';
+      try {
+        const res = await fetch(API_URL + '?action=fetchCifra&url=' + encodeURIComponent(url));
+        const data = await res.json();
+        if (data.ok) {
+          document.getElementById('bodyInput').value = data.body;
+          if (data.title && !document.getElementById('titleInput').value.trim()) {
+            document.getElementById('titleInput').value = data.title;
+          }
+          statusEl.textContent = 'Cifra importada. Revise o texto antes de salvar.';
+          statusEl.className = 'import-status ok';
+        } else {
+          statusEl.textContent = data.error || 'Não foi possível importar essa página.';
+          statusEl.className = 'import-status error';
+        }
+      } catch (e) {
+        statusEl.textContent = 'Erro de conexão ao buscar o link.';
+        statusEl.className = 'import-status error';
+      }
+    });
+
+    document.getElementById('pdfInput').addEventListener('change', async (ev) => {
+      const file = ev.target.files[0];
+      const statusEl = document.getElementById('pdfStatus');
+      if (!file) return;
+      statusEl.textContent = 'Lendo PDF...';
+      statusEl.className = 'import-status';
+      try {
+        const text = await extractPdfText(file);
+        document.getElementById('bodyInput').value = text.trim();
+        statusEl.textContent = 'Texto extraído. Revise a formatação antes de salvar.';
+        statusEl.className = 'import-status ok';
+      } catch (e) {
+        statusEl.textContent = 'Não foi possível ler esse PDF.';
+        statusEl.className = 'import-status error';
+      }
+    });
+
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+      currentView = editing ? { mode: 'view', id: song.id } : { mode: 'placeholder' };
+      renderList();
+      renderMain();
+    });
+
+    document.getElementById('saveBtn').addEventListener('click', async () => {
+      const title = document.getElementById('titleInput').value.trim();
+      const category = document.getElementById('catInput').value;
+      const key = document.getElementById('keyInput').value.trim();
+      const body = document.getElementById('bodyInput').value;
+      const errorEl = document.getElementById('formError');
+      const statusEl = document.getElementById('statusMsg');
+
+      if (!title) {
+        errorEl.textContent = 'Digite o nome da música.';
+        return;
+      }
+      if (!body.trim()) {
+        errorEl.textContent = 'Cole ou digite a cifra.';
+        return;
+      }
+      errorEl.textContent = '';
+
+      if (editing) {
+        song.title = title;
+        song.category = category;
+        song.key = key;
+        song.body = body;
+      } else {
+        songs.push({ id: 's' + Date.now(), title: title, category: category, key: key, body: body });
+      }
+
+      statusEl.textContent = 'Salvando...';
+      const ok = await saveSongs();
+      if (ok) {
+        const savedId = editing ? song.id : songs[songs.length - 1].id;
+        currentView = { mode: 'view', id: savedId };
+        renderList();
+        renderMain();
+      } else {
+        statusEl.textContent = 'Não foi possível salvar. Verifique a conexão e tente novamente.';
+        statusEl.classList.add('error');
+      }
+    });
+  }
+}
+
+function buildPrintArea() {
+  const printArea = document.getElementById('printArea');
+  printArea.innerHTML = '';
+
+  const summaryDiv = document.createElement('div');
+  summaryDiv.className = 'print-summary';
+  const h1 = document.createElement('h1');
+  h1.textContent = 'Cifras — Grupo de Louvor';
+  summaryDiv.appendChild(h1);
+
+  const ordered = [];
+  CATEGORIES.forEach(cat => {
+    const inCat = songs.filter(s => catLabel(s.category) === cat).sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
+    if (inCat.length === 0) return;
+    const h2 = document.createElement('h2');
+    h2.textContent = cat;
+    summaryDiv.appendChild(h2);
+    inCat.forEach(song => {
+      const row = document.createElement('div');
+      row.className = 'print-summary-row';
+      row.innerHTML = '<span></span><span></span>';
+      row.querySelector('span:first-child').textContent = song.title;
+      row.querySelector('span:last-child').textContent = song.key || '';
+      summaryDiv.appendChild(row);
+      ordered.push(song);
+    });
+  });
+  printArea.appendChild(summaryDiv);
+
+  ordered.forEach(song => {
+    const sec = document.createElement('div');
+    sec.className = 'print-song';
+    const t = document.createElement('p');
+    t.className = 'print-title';
+    t.textContent = song.title;
+    sec.appendChild(t);
+    const metaParts = [catLabel(song.category)];
+    if (song.key) metaParts.push('Tom: ' + song.key);
+    const m = document.createElement('p');
+    m.className = 'print-meta';
+    m.textContent = metaParts.join(' · ');
+    sec.appendChild(m);
+    const b = document.createElement('div');
+    b.className = 'print-body';
+    b.textContent = song.body;
+    sec.appendChild(b);
+    printArea.appendChild(sec);
+  });
+}
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  if (songs.length === 0) {
+    alert('Ainda não há cifras cadastradas.');
+    return;
+  }
+  buildPrintArea();
+  window.print();
+});
+
+document.getElementById('searchInput').addEventListener('input', renderList);
+document.getElementById('newSongBtn').addEventListener('click', showNewForm);
+document.getElementById('summaryBtn').addEventListener('click', showSummary);
+
+loadSongs();
+</script>
+
+</body>
+</html>
