@@ -100,8 +100,34 @@
     font-size:14px;
     color:var(--ink-soft);
     margin-bottom:10px;
+    z-index:5;
   }
   .collapse-btn:hover{border-color:var(--wine);color:var(--wine);}
+
+  .mobile-menu-btn{
+    display:none;
+    position:fixed;
+    top:74px;
+    left:14px;
+    z-index:30;
+    background:var(--wine);
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    width:38px;
+    height:38px;
+    font-size:18px;
+    cursor:pointer;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);
+  }
+  .sidebar-backdrop{
+    display:none;
+    position:fixed;
+    top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,.35);
+    z-index:19;
+  }
+  .sidebar-backdrop.show{display:block;}
 
   .search-box{
     display:flex;
@@ -267,6 +293,8 @@
   .login-box h2{font-family:'Fraunces', serif;font-size:19px;margin:0 0 14px;}
 
   @media(max-width:800px){
+    .collapse-btn{display:none;}
+    .mobile-menu-btn{display:flex;align-items:center;justify-content:center;}
     .sidebar{position:fixed;top:65px;left:0;bottom:0;background:#fff;z-index:20;width:280px;box-shadow:2px 0 12px rgba(0,0,0,.08);}
     .sidebar.collapsed{margin-left:-280px;}
     .main{width:100%;}
@@ -299,6 +327,8 @@
   <div class="header-actions" id="headerActions"></div>
 </header>
 
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+<button class="mobile-menu-btn" id="mobileMenuBtn" title="Abrir lista de cifras">☰</button>
 <div class="layout">
   <div class="sidebar" id="sidebar">
     <div class="search-box">
@@ -466,9 +496,33 @@ function renderAll() {
 
 document.getElementById('collapseBtn').addEventListener('click', () => {
   sidebarCollapsed = !sidebarCollapsed;
+  applySidebarState();
+});
+
+document.getElementById('mobileMenuBtn').addEventListener('click', () => {
+  sidebarCollapsed = false;
+  applySidebarState();
+});
+
+document.getElementById('sidebarBackdrop').addEventListener('click', () => {
+  sidebarCollapsed = true;
+  applySidebarState();
+});
+
+function isMobile() {
+  return window.innerWidth <= 800;
+}
+
+function applySidebarState() {
   document.getElementById('sidebar').classList.toggle('collapsed', sidebarCollapsed);
   document.getElementById('collapseBtn').textContent = sidebarCollapsed ? '▸' : '◂';
-});
+  document.getElementById('sidebarBackdrop').classList.toggle('show', isMobile() && !sidebarCollapsed);
+}
+
+if (isMobile()) {
+  sidebarCollapsed = true;
+  applySidebarState();
+}
 
 function renderList() {
   document.getElementById('newSongBtn').style.display = isAdmin ? 'block' : 'none';
@@ -527,6 +581,7 @@ function showSong(id) {
   if (!song) return;
   currentView = { mode: 'view', id: id };
   cifraFontSize = 14;
+  if (isMobile()) { sidebarCollapsed = true; applySidebarState(); }
   renderList();
   renderMain();
 }
@@ -559,6 +614,25 @@ function showProgramList() {
 
 function showProgramDetail(id) {
   currentView = { mode: 'programDetail', id: id };
+  renderList();
+  renderMain();
+}
+
+function showProgramEditor(existingId) {
+  if (!isAdmin) return;
+  if (existingId) {
+    const p = programs.find(x => x.id === existingId);
+    programEditorState = {
+      editingId: p.id,
+      name: p.name,
+      theme: p.theme || '',
+      escala: p.escala || '',
+      songIds: (p.songIds || []).slice()
+    };
+  } else {
+    programEditorState = { editingId: null, name: '', theme: '', escala: '', songIds: [] };
+  }
+  currentView = { mode: 'programEdit' };
   renderList();
   renderMain();
 }
