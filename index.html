@@ -321,7 +321,7 @@
   @media(max-width:800px){
     .collapse-btn{display:none;}
     .mobile-menu-btn{display:flex;align-items:center;justify-content:center;}
-    .sidebar{position:fixed;top:65px;left:0;bottom:0;background:#fff;z-index:20;width:280px;box-shadow:2px 0 12px rgba(0,0,0,.08);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
+    .sidebar{position:fixed;top:65px;left:0;bottom:0;background:#fff;z-index:20;width:280px;box-shadow:2px 0 12px rgba(0,0,0,.08);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;min-height:0;height:calc(100vh - 65px);}
     .sidebar.collapsed{margin-left:-280px;}
     .main{width:100%;}
   }
