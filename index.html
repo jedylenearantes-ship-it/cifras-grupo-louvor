@@ -223,7 +223,7 @@
   .form-wrap h2{font-family:'Fraunces', serif;font-weight:600;font-size:20px;margin:0 0 16px;}
   .field{margin-bottom:14px;}
   .field label{display:block;font-size:13px;font-weight:600;color:var(--ink-soft);margin-bottom:5px;}
-  .field input, .field textarea, .field select{
+  .field > input, .field > textarea, .field > select{
     width:100%;border:1px solid var(--line);border-radius:6px;padding:9px 11px;font-size:14px;font-family:inherit;color:var(--ink);background:#fff;
   }
   .field textarea{font-family:'JetBrains Mono', monospace;font-size:13.5px;line-height:1.7;min-height:200px;resize:vertical;}
@@ -280,9 +280,13 @@
   .prog-song-row .order-btns button{border:1px solid var(--line);background:#fff;border-radius:4px;width:24px;height:24px;cursor:pointer;font-size:12px;color:var(--ink-soft);}
   .prog-song-row .order-btns button:hover{border-color:var(--wine);color:var(--wine);}
 
-  .picker-list{max-height:260px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:#fff;}
-  .picker-row{display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13.5px;}
-  .picker-row label{flex:1;cursor:pointer;}
+  .picker-list{max-height:320px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:#fff;}
+  .picker-cat-label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;margin:14px 0 4px;}
+  .picker-cat-label:first-child{margin-top:2px;}
+  .picker-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 2px;font-size:13.5px;border-bottom:1px solid var(--line);}
+  .picker-row:last-child{border-bottom:none;}
+  .picker-row label{flex:1;cursor:pointer;min-width:0;}
+  .picker-row input[type="checkbox"]{flex-shrink:0;width:16px;height:16px;margin:0;}
 
   .login-box{
     max-width:340px;
@@ -1135,21 +1139,31 @@ function renderPicker() {
     el.innerHTML = '<div class="empty-list">Nenhuma cifra cadastrada ainda.</div>';
     return;
   }
-  list.forEach(song => {
-    const row = document.createElement('div');
-    row.className = 'picker-row';
-    const checked = programEditorState.songIds.includes(song.id);
-    row.innerHTML = '<input type="checkbox" ' + (checked ? 'checked' : '') + '><label></label>';
-    row.querySelector('label').textContent = catLabel(song.category) + ' — ' + song.title;
-    row.querySelector('input').addEventListener('change', (ev) => {
-      if (ev.target.checked) {
-        if (!programEditorState.songIds.includes(song.id)) programEditorState.songIds.push(song.id);
-      } else {
-        programEditorState.songIds = programEditorState.songIds.filter(id => id !== song.id);
-      }
-      renderOrderList();
+  CATEGORIES.forEach(cat => {
+    const inCat = list.filter(s => catLabel(s.category) === cat);
+    if (inCat.length === 0) return;
+
+    const label = document.createElement('div');
+    label.className = 'picker-cat-label';
+    label.textContent = cat;
+    el.appendChild(label);
+
+    inCat.forEach(song => {
+      const row = document.createElement('div');
+      row.className = 'picker-row';
+      const checked = programEditorState.songIds.includes(song.id);
+      row.innerHTML = '<label></label><input type="checkbox" ' + (checked ? 'checked' : '') + '>';
+      row.querySelector('label').textContent = song.title;
+      row.querySelector('input').addEventListener('change', (ev) => {
+        if (ev.target.checked) {
+          if (!programEditorState.songIds.includes(song.id)) programEditorState.songIds.push(song.id);
+        } else {
+          programEditorState.songIds = programEditorState.songIds.filter(id => id !== song.id);
+        }
+        renderOrderList();
+      });
+      el.appendChild(row);
     });
-    el.appendChild(row);
   });
 }
 
