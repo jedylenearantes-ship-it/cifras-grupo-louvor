@@ -396,12 +396,35 @@ let cifraFontSize = 14;
 let programEditorState = null; // { editingId, name, theme, escala, songIds: [] }
 let activeProgramContext = null; // { programId, songIds: [] }
 
-/* ---------- storage ---------- */
+/* ---------- storage (JSONP para evitar bloqueio de CORS) ---------- */
+
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+    const script = document.createElement('script');
+    let done = false;
+    const cleanup = () => {
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+    window[cbName] = (data) => {
+      done = true;
+      cleanup();
+      resolve(data);
+    };
+    script.onerror = () => {
+      if (!done) { cleanup(); reject(new Error('Falha ao carregar dados.')); }
+    };
+    const sep = url.indexOf('?') === -1 ? '?' : '&';
+    script.src = url + sep + 'callback=' + cbName;
+    document.body.appendChild(script);
+    setTimeout(() => { if (!done) { cleanup(); reject(new Error('Tempo esgotado.')); } }, 15000);
+  });
+}
 
 async function loadSongs() {
   try {
-    const res = await fetch(API_URL + '?key=songs');
-    const data = await res.json();
+    const data = await jsonp(API_URL + '?key=songs');
     songs = Array.isArray(data) ? data : [];
     songsLoaded = true;
   } catch (e) {
@@ -413,13 +436,13 @@ async function loadSongs() {
 
 async function saveSongs() {
   try {
-    const res = await fetch(API_URL, {
+    await fetch(API_URL, {
       method: 'POST',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(songs)
     });
-    const data = await res.json();
-    return !!data.ok;
+    return true;
   } catch (e) {
     return false;
   }
@@ -427,8 +450,7 @@ async function saveSongs() {
 
 async function loadPrograms() {
   try {
-    const res = await fetch(API_URL + '?key=programs');
-    const data = await res.json();
+    const data = await jsonp(API_URL + '?key=programs');
     programs = Array.isArray(data) ? data : [];
     programsLoaded = true;
   } catch (e) {
@@ -439,13 +461,13 @@ async function loadPrograms() {
 
 async function savePrograms() {
   try {
-    const res = await fetch(API_URL + '?key=programs', {
+    await fetch(API_URL + '?key=programs', {
       method: 'POST',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(programs)
     });
-    const data = await res.json();
-    return !!data.ok;
+    return true;
   } catch (e) {
     return false;
   }
@@ -919,8 +941,7 @@ function renderSongForm(main) {
     statusEl.textContent = 'Buscando...';
     statusEl.className = 'import-status';
     try {
-      const res = await fetch(API_URL + '?action=fetchCifra&url=' + encodeURIComponent(url));
-      const data = await res.json();
+      const data = await jsonp(API_URL + '?action=fetchCifra&url=' + encodeURIComponent(url));
       if (data.ok) {
         document.getElementById('bodyInput').value = data.body;
         if (data.title && !document.getElementById('titleInput').value.trim()) {
