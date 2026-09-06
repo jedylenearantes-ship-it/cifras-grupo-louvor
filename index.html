@@ -228,7 +228,7 @@
   .zoom-group span{padding:0 8px;font-size:12px;color:var(--ink-soft);border-left:1px solid var(--line);border-right:1px solid var(--line);}
 
   .cifra-body{
-    white-space:pre-wrap;
+    white-space:pre;
     font-family:'JetBrains Mono', monospace;
     font-size:var(--cifra-size);
     line-height:1.85;
@@ -238,6 +238,7 @@
     padding:20px 22px;
     margin-top:16px;
     overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
   }
 
   .form-wrap{background:#fff;border:1px solid var(--line);border-radius:8px;padding:20px 22px;max-width:720px;}
@@ -369,7 +370,7 @@
   </div>
   <button class="collapse-btn" id="collapseBtn" title="Recolher/expandir lista">◂</button>
   <div class="main" id="mainArea">
-    <div class="placeholder">Selecione uma cifra na lista, veja o sumário ou a programação.</div>
+    <div class="placeholder">Carregando sumário...</div>
   </div>
 </div>
 
@@ -392,7 +393,7 @@ let programsLoaded = false;
 let songsLoadError = '';
 let isAdmin = false;
 let sidebarCollapsed = false;
-let currentView = { mode: 'placeholder' };
+let currentView = { mode: 'summary' };
 let cifraFontSize = 14;
 let programEditorState = null; // { editingId, name, theme, escala, songIds: [] }
 let activeProgramContext = null; // { programId, songIds: [] }
@@ -437,6 +438,7 @@ async function loadSongs() {
     songsLoadError = (e && e.message) ? e.message : 'Erro desconhecido';
   }
   renderList();
+  if (currentView.mode === 'summary') renderMain();
 }
 
 async function saveSongs() {
@@ -451,6 +453,32 @@ async function saveSongs() {
   } catch (e) {
     return false;
   }
+}
+
+// Busca a versão mais recente da planilha, aplica a alteração por cima dela,
+// e só então salva — evita que uma edição feita em outro aparelho seja apagada.
+async function fetchLatestSongs() {
+  try {
+    const data = await jsonp(API_URL + '?key=songs');
+    const raw = Array.isArray(data) ? data : [];
+    return raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
+  } catch (e) {
+    return songs.slice();
+  }
+}
+
+async function upsertSong(songObj) {
+  const latest = await fetchLatestSongs();
+  const idx = latest.findIndex(s => s.id === songObj.id);
+  if (idx !== -1) { latest[idx] = songObj; } else { latest.push(songObj); }
+  songs = latest;
+  return await saveSongs();
+}
+
+async function removeSong(id) {
+  const latest = await fetchLatestSongs();
+  songs = latest.filter(s => s.id !== id);
+  return await saveSongs();
 }
 
 async function loadPrograms() {
@@ -650,7 +678,7 @@ function showSong(id, progContext) {
   const song = songs.find(s => s.id === id);
   if (!song) return;
   currentView = { mode: 'view', id: id };
-  cifraFontSize = 14;
+  cifraFontSize = isMobile() ? 12 : 14;
   activeProgramContext = progContext || null;
   if (isMobile()) { sidebarCollapsed = true; applySidebarState(); }
   renderList();
@@ -861,6 +889,12 @@ function renderSongView(main) {
   zoomGroup.innerHTML = '<button id="zoomOut">A−</button><span id="zoomLabel"></span><button id="zoomIn">A+</button>';
   actions.appendChild(zoomGroup);
 
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'btn btn-outline btn-sm';
+  exportBtn.textContent = 'Exportar PDF';
+  exportBtn.addEventListener('click', () => printOneSong(song));
+  actions.appendChild(exportBtn);
+
   if (isAdmin) {
     const editBtn = document.createElement('button');
     editBtn.className = 'btn btn-outline btn-sm';
@@ -873,8 +907,7 @@ function renderSongView(main) {
     delBtn.textContent = 'Excluir';
     delBtn.addEventListener('click', async () => {
       if (confirm('Excluir "' + song.title + '"? Isso remove a cifra para todo o grupo.')) {
-        songs = songs.filter(s => s.id !== song.id);
-        const ok = await saveSongs();
+        const ok = await removeSong(song.id);
         currentView = { mode: 'placeholder' };
         renderList();
         renderMain();
@@ -1013,17 +1046,14 @@ function renderSongForm(main) {
     if (!body.trim()) { errorEl.textContent = 'Cole ou digite a cifra.'; return; }
     errorEl.textContent = '';
 
-    if (editing) {
-      song.title = title; song.category = category; song.key = key; song.body = body;
-    } else {
-      songs.push({ id: 's' + Date.now(), title: title, category: category, key: key, body: body });
-    }
+    const songObj = editing
+      ? { id: song.id, title: title, category: category, key: key, body: body }
+      : { id: 's' + Date.now(), title: title, category: category, key: key, body: body };
 
     statusEl.textContent = 'Salvando...';
-    const ok = await saveSongs();
+    const ok = await upsertSong(songObj);
     if (ok) {
-      const savedId = editing ? song.id : songs[songs.length - 1].id;
-      currentView = { mode: 'view', id: savedId };
+      currentView = { mode: 'view', id: songObj.id };
       renderList();
       renderMain();
     } else {
@@ -1099,6 +1129,15 @@ function renderProgramDetail(main) {
   h2.className = 'prog-title';
   h2.textContent = prog.name;
   wrap.appendChild(h2);
+
+  const exportRow = document.createElement('div');
+  exportRow.style.marginBottom = '14px';
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'btn btn-outline btn-sm';
+  exportBtn.textContent = 'Exportar esta programação em PDF';
+  exportBtn.addEventListener('click', () => exportProgramPdf(prog));
+  exportRow.appendChild(exportBtn);
+  wrap.appendChild(exportRow);
 
   if (isAdmin) {
     const actionsRow = document.createElement('div');
@@ -1321,11 +1360,14 @@ async function extractPdfText(file) {
     lines.sort((a, b) => b.y - a.y);
     lines.forEach(line => {
       line.items.sort((a, b) => a.transform[4] - b.transform[4]);
-      const cw = (line.items[0] && line.items[0].height) ? line.items[0].height * 0.58 : 5.2;
+      let cw = (line.items[0] && line.items[0].height) ? line.items[0].height * 0.58 : 5.2;
+      if (!cw || !isFinite(cw) || cw < 1) cw = 5.2;
       let lineStr = '';
       let cursor = 0;
       line.items.forEach(item => {
-        const targetCol = Math.max(cursor, Math.round(item.transform[4] / cw));
+        let targetCol = Math.max(cursor, Math.round(item.transform[4] / cw));
+        if (!isFinite(targetCol)) targetCol = cursor;
+        targetCol = Math.min(targetCol, cursor + 300); // proteção contra loop infinito
         while (cursor < targetCol) { lineStr += ' '; cursor++; }
         lineStr += item.str;
         cursor += item.str.length;
@@ -1338,6 +1380,33 @@ async function extractPdfText(file) {
 }
 
 /* ---------- PDF export (all songs) ---------- */
+
+function printOneSong(song) {
+  const printArea = document.getElementById('printArea');
+  printArea.innerHTML = '';
+  printArea.appendChild(buildPrintSongSection(song));
+  window.print();
+}
+
+function buildPrintSongSection(song) {
+  const sec = document.createElement('div');
+  sec.className = 'print-song';
+  const t = document.createElement('p');
+  t.className = 'print-title';
+  t.textContent = String(songNumber(song.id)).padStart(2, '0') + ' · ' + song.title;
+  sec.appendChild(t);
+  const metaParts = [catLabel(song.category)];
+  if (song.key) metaParts.push('Tom: ' + song.key);
+  const m = document.createElement('p');
+  m.className = 'print-meta';
+  m.textContent = metaParts.join(' · ');
+  sec.appendChild(m);
+  const b = document.createElement('div');
+  b.className = 'print-body';
+  b.textContent = song.body;
+  sec.appendChild(b);
+  return sec;
+}
 
 function buildPrintArea() {
   const printArea = document.getElementById('printArea');
@@ -1367,23 +1436,7 @@ function buildPrintArea() {
   printArea.appendChild(summaryDiv);
 
   ordered.forEach(song => {
-    const sec = document.createElement('div');
-    sec.className = 'print-song';
-    const t = document.createElement('p');
-    t.className = 'print-title';
-    t.textContent = String(songNumber(song.id)).padStart(2, '0') + ' · ' + song.title;
-    sec.appendChild(t);
-    const metaParts = [catLabel(song.category)];
-    if (song.key) metaParts.push('Tom: ' + song.key);
-    const m = document.createElement('p');
-    m.className = 'print-meta';
-    m.textContent = metaParts.join(' · ');
-    sec.appendChild(m);
-    const b = document.createElement('div');
-    b.className = 'print-body';
-    b.textContent = song.body;
-    sec.appendChild(b);
-    printArea.appendChild(sec);
+    printArea.appendChild(buildPrintSongSection(song));
   });
 }
 
@@ -1393,9 +1446,56 @@ function exportAllPdf() {
   window.print();
 }
 
+function exportProgramPdf(prog) {
+  const list = (prog.songIds || []).map(id => songs.find(s => s.id === id)).filter(Boolean);
+  if (list.length === 0) { alert('Essa programação não tem cifras válidas pra exportar.'); return; }
+
+  const printArea = document.getElementById('printArea');
+  printArea.innerHTML = '';
+  const summaryDiv = document.createElement('div');
+  summaryDiv.className = 'print-summary';
+  const h1 = document.createElement('h1');
+  h1.textContent = prog.name;
+  summaryDiv.appendChild(h1);
+
+  if (prog.theme) {
+    const themeP = document.createElement('p');
+    themeP.className = 'print-summary-row';
+    themeP.textContent = 'Tema: ' + prog.theme;
+    summaryDiv.appendChild(themeP);
+  }
+  if (prog.escala) {
+    const escalaP = document.createElement('p');
+    escalaP.className = 'print-summary-row';
+    escalaP.textContent = 'Escala: ' + prog.escala;
+    summaryDiv.appendChild(escalaP);
+  }
+
+  const h2 = document.createElement('h2');
+  h2.textContent = 'Ordem das cifras';
+  summaryDiv.appendChild(h2);
+  list.forEach((song, idx) => {
+    const row = document.createElement('div');
+    row.className = 'print-summary-row';
+    row.innerHTML = '<span></span><span></span>';
+    row.querySelector('span:first-child').textContent = String(idx + 1).padStart(2, '0') + ' · ' + song.title;
+    row.querySelector('span:last-child').textContent = song.key || '';
+    summaryDiv.appendChild(row);
+  });
+  printArea.appendChild(summaryDiv);
+
+  list.forEach(song => {
+    printArea.appendChild(buildPrintSongSection(song));
+  });
+
+  window.print();
+}
+
 /* ---------- init ---------- */
 
 renderHeaderActions();
+renderList();
+renderMain();
 loadSongs();
 loadPrograms();
 </script>
