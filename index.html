@@ -389,6 +389,7 @@ let songs = [];
 let programs = [];
 let songsLoaded = false;
 let programsLoaded = false;
+let songsLoadError = '';
 let isAdmin = false;
 let sidebarCollapsed = false;
 let currentView = { mode: 'placeholder' };
@@ -425,11 +426,15 @@ function jsonp(url) {
 async function loadSongs() {
   try {
     const data = await jsonp(API_URL + '?key=songs');
-    songs = Array.isArray(data) ? data : [];
+    const raw = Array.isArray(data) ? data : [];
+    // proteção: ignora qualquer item que não seja uma cifra válida (ex: programações salvas por engano no lugar errado)
+    songs = raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
     songsLoaded = true;
+    songsLoadError = '';
   } catch (e) {
     songs = [];
     songsLoaded = false;
+    songsLoadError = (e && e.message) ? e.message : 'Erro desconhecido';
   }
   renderList();
 }
@@ -451,7 +456,8 @@ async function saveSongs() {
 async function loadPrograms() {
   try {
     const data = await jsonp(API_URL + '?key=programs');
-    programs = Array.isArray(data) ? data : [];
+    const raw = Array.isArray(data) ? data : [];
+    programs = raw.filter(p => p && typeof p.name === 'string' && Array.isArray(p.songIds));
     programsLoaded = true;
   } catch (e) {
     programs = [];
@@ -615,7 +621,20 @@ function renderList() {
   if (!any) {
     const div = document.createElement('div');
     div.className = 'empty-list';
-    div.textContent = !songsLoaded ? 'Carregando...' : (songs.length === 0 ? 'Nenhuma cifra ainda.' : 'Nada encontrado.');
+    if (songsLoadError) {
+      div.innerHTML = '';
+      const p1 = document.createElement('p');
+      p1.textContent = 'Erro ao carregar: ' + songsLoadError;
+      p1.style.color = 'var(--danger)';
+      div.appendChild(p1);
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'btn btn-outline btn-sm';
+      retryBtn.textContent = 'Tentar novamente';
+      retryBtn.addEventListener('click', loadSongs);
+      div.appendChild(retryBtn);
+    } else {
+      div.textContent = !songsLoaded ? 'Carregando...' : (songs.length === 0 ? 'Nenhuma cifra ainda.' : 'Nada encontrado.');
+    }
     container.appendChild(div);
   }
 }
