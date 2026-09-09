@@ -420,7 +420,7 @@ function jsonp(url) {
     const sep = url.indexOf('?') === -1 ? '?' : '&';
     script.src = url + sep + 'callback=' + cbName;
     document.body.appendChild(script);
-    setTimeout(() => { if (!done) { cleanup(); reject(new Error('Tempo esgotado.')); } }, 15000);
+    setTimeout(() => { if (!done) { cleanup(); reject(new Error('Tempo esgotado.')); } }, 20000);
   });
 }
 
@@ -463,18 +463,26 @@ function formPost(url, params) {
 }
 
 async function loadSongs() {
-  try {
-    const data = await jsonp(API_URL + '?key=songs');
-    const raw = Array.isArray(data) ? data : [];
-    // proteção: ignora qualquer item que não seja uma cifra válida (ex: programações salvas por engano no lugar errado)
-    songs = raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
-    songsLoaded = true;
-    songsLoadError = '';
-  } catch (e) {
-    songs = [];
-    songsLoaded = false;
-    songsLoadError = (e && e.message) ? e.message : 'Erro desconhecido';
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await wait(1500);
+    try {
+      const data = await jsonp(API_URL + '?key=songs');
+      const raw = Array.isArray(data) ? data : [];
+      // proteção: ignora qualquer item que não seja uma cifra válida (ex: programações salvas por engano no lugar errado)
+      songs = raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
+      songsLoaded = true;
+      songsLoadError = '';
+      renderList();
+      if (currentView.mode === 'summary') renderMain();
+      return;
+    } catch (e) {
+      lastError = e;
+    }
   }
+  songs = [];
+  songsLoaded = false;
+  songsLoadError = (lastError && lastError.message) ? lastError.message : 'Erro desconhecido';
   renderList();
   if (currentView.mode === 'summary') renderMain();
 }
@@ -542,15 +550,20 @@ async function removeSong(id) {
 }
 
 async function loadPrograms() {
-  try {
-    const data = await jsonp(API_URL + '?key=programs');
-    const raw = Array.isArray(data) ? data : [];
-    programs = raw.filter(p => p && typeof p.name === 'string' && Array.isArray(p.songIds));
-    programsLoaded = true;
-  } catch (e) {
-    programs = [];
-    programsLoaded = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await wait(1500);
+    try {
+      const data = await jsonp(API_URL + '?key=programs');
+      const raw = Array.isArray(data) ? data : [];
+      programs = raw.filter(p => p && typeof p.name === 'string' && Array.isArray(p.songIds));
+      programsLoaded = true;
+      return;
+    } catch (e) {
+      // tenta de novo
+    }
   }
+  programs = [];
+  programsLoaded = false;
 }
 
 async function savePrograms() {
