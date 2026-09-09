@@ -382,7 +382,7 @@ if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbzIzre_hoCd0Xq6bKQkXJvMz0ssWVuD5KGmOYW5j7wLY_SxBZagGgXqtqTx4UTNY5K0IA/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwQiUEfJTxGrU8MNwRPGYMxoZTxUFdNs5WdmAuBZG9yqs594Jvl78JZ_fKD4IZ0rY1f/exec';
 const ADMIN_PASSWORD = 'louvor2026'; // troque essa senha aqui no código quando quiser
 const CATEGORIES = ['Gerais', 'Ceia', 'Irmãs', 'Jovens', 'Crianças'];
 
@@ -458,7 +458,7 @@ function formPost(url, params) {
     iframe.addEventListener('load', () => {
       setTimeout(() => { cleanup(); resolve(true); }, 300);
     });
-    setTimeout(() => { cleanup(); resolve(true); }, 4000);
+    setTimeout(() => { cleanup(); resolve(true); }, 7000);
   });
 }
 
@@ -511,22 +511,34 @@ async function upsertSong(songObj) {
 
 // Confirma de verdade se a cifra ficou salva na planilha, buscando os dados
 // direto do servidor de novo (não confia só no "sucesso" do envio).
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function verifySongSaved(songObj) {
-  try {
-    const check = await fetchLatestSongs();
-    const found = check.find(s => s.id === songObj.id);
-    return !!(found && found.title === songObj.title && found.body === songObj.body);
-  } catch (e) {
-    return false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await wait(1800);
+    try {
+      const check = await fetchLatestSongs();
+      const found = check.find(s => s.id === songObj.id);
+      if (found && found.title === songObj.title && found.body === songObj.body) return true;
+    } catch (e) {
+      // tenta de novo
+    }
   }
+  return false;
 }
 
 async function removeSong(id) {
   const latest = await fetchLatestSongs();
   songs = latest.filter(s => s.id !== id);
   await saveSongs();
-  const check = await fetchLatestSongs();
-  return !check.find(s => s.id === id);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await wait(1800);
+    const check = await fetchLatestSongs();
+    if (!check.find(s => s.id === id)) return true;
+  }
+  return false;
 }
 
 async function loadPrograms() {
