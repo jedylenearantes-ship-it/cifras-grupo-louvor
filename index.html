@@ -400,26 +400,29 @@ let activeProgramContext = null; // { programId, songIds: [] }
 
 /* ---------- storage (JSONP para evitar bloqueio de CORS) ---------- */
 
-function jsonp(url) {
+// Busca dados usando uma janela escondida que "navega" de verdade até o link
+// (em vez de carregar um script), e recebe a resposta por postMessage.
+// Mais confiável que o método anterior em redes/navegadores que bloqueiam scripts dinâmicos.
+function frameGet(url) {
   return new Promise((resolve, reject) => {
-    const cbName = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
-    const script = document.createElement('script');
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
     let done = false;
     const cleanup = () => {
-      delete window[cbName];
-      if (script.parentNode) script.parentNode.removeChild(script);
+      window.removeEventListener('message', onMsg);
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
     };
-    window[cbName] = (data) => {
-      done = true;
-      cleanup();
-      resolve(data);
+    const onMsg = (event) => {
+      if (event.data && event.data.__cifrasApp) {
+        done = true;
+        cleanup();
+        resolve(event.data.data);
+      }
     };
-    script.onerror = () => {
-      if (!done) { cleanup(); reject(new Error('Falha ao carregar dados.')); }
-    };
+    window.addEventListener('message', onMsg);
     const sep = url.indexOf('?') === -1 ? '?' : '&';
-    script.src = url + sep + 'callback=' + cbName;
-    document.body.appendChild(script);
+    iframe.src = url + sep + 'frame=1';
+    document.body.appendChild(iframe);
     setTimeout(() => { if (!done) { cleanup(); reject(new Error('Tempo esgotado.')); } }, 20000);
   });
 }
@@ -467,7 +470,7 @@ async function loadSongs() {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await wait(1500);
     try {
-      const data = await jsonp(API_URL + '?key=songs');
+      const data = await frameGet(API_URL + '?key=songs');
       const raw = Array.isArray(data) ? data : [];
       // proteção: ignora qualquer item que não seja uma cifra válida (ex: programações salvas por engano no lugar errado)
       songs = raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
@@ -500,7 +503,7 @@ async function saveSongs() {
 // e só então salva — evita que uma edição feita em outro aparelho seja apagada.
 async function fetchLatestSongs() {
   try {
-    const data = await jsonp(API_URL + '?key=songs');
+    const data = await frameGet(API_URL + '?key=songs');
     const raw = Array.isArray(data) ? data : [];
     return raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
   } catch (e) {
@@ -553,7 +556,7 @@ async function loadPrograms() {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await wait(1500);
     try {
-      const data = await jsonp(API_URL + '?key=programs');
+      const data = await frameGet(API_URL + '?key=programs');
       const raw = Array.isArray(data) ? data : [];
       programs = raw.filter(p => p && typeof p.name === 'string' && Array.isArray(p.songIds));
       programsLoaded = true;
@@ -1061,7 +1064,7 @@ function renderSongForm(main) {
     statusEl.textContent = 'Buscando...';
     statusEl.className = 'import-status';
     try {
-      const data = await jsonp(API_URL + '?action=fetchCifra&url=' + encodeURIComponent(url));
+      const data = await frameGet(API_URL + '?action=fetchCifra&url=' + encodeURIComponent(url));
       if (data.ok) {
         document.getElementById('bodyInput').value = data.body;
         if (data.title && !document.getElementById('titleInput').value.trim()) {
