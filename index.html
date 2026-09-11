@@ -478,7 +478,6 @@ function formPost(url, params) {
     const iframe = document.createElement('iframe');
     iframe.name = iframeName;
     iframe.style.display = 'none';
-    document.body.appendChild(iframe);
 
     const form = document.createElement('form');
     form.method = 'POST';
@@ -497,10 +496,12 @@ function formPost(url, params) {
     });
 
     let finished = false;
+    let timer = null;
+
     const cleanup = () => {
-      window.removeEventListener('message', onMessage);
-      if (form.parentNode) form.parentNode.removeChild(form);
+      if (timer) clearTimeout(timer);
       if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      if (form.parentNode) form.parentNode.removeChild(form);
     };
 
     const finish = (ok, data) => {
@@ -508,22 +509,23 @@ function formPost(url, params) {
       finished = true;
       cleanup();
       if (ok) resolve(data || { ok: true });
-      else reject(new Error((data && data.error) || 'Falha ao salvar no servidor.'));
+      else reject(new Error((data && data.error) || 'Falha ao enviar os dados para o servidor.'));
     };
 
-    const onMessage = (event) => {
-      if (!event.data || event.data.__cifrasSave !== true) return;
-      finish(event.data.ok === true, event.data);
-    };
+    // O Apps Script pode redirecionar a resposta para script.googleusercontent.com.
+    // Por isso não dependemos de ler a resposta do iframe nem de postMessage.
+    // O evento load apenas confirma que o POST terminou; o código de salvamento
+    // faz uma nova leitura da planilha para confirmar que os dados realmente foram gravados.
+    iframe.addEventListener('load', () => {
+      setTimeout(() => finish(true, { ok: true }), 700);
+    });
 
-    window.addEventListener('message', onMessage);
+    document.body.appendChild(iframe);
     document.body.appendChild(form);
     form.submit();
 
-    // Se o Apps Script não responder, não tratamos simplesmente como sucesso.
-    // Isso evita o falso "salvou" que existia antes.
-    setTimeout(() => {
-      finish(false, { error: 'O servidor não confirmou o salvamento dentro do tempo esperado.' });
+    timer = setTimeout(() => {
+      finish(false, { error: 'O servidor demorou demais para responder ao salvamento.' });
     }, 15000);
   });
 }
