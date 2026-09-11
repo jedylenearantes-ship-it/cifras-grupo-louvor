@@ -427,10 +427,53 @@ function frameGet(url) {
   });
 }
 
+// Busca dados como JSONP. O Apps Script devolve JavaScript chamando a função
+// criada abaixo, evitando o bloqueio de CORS do GitHub Pages/Safari.
+function jsonpGet(url) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'cifrasCallback_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
+    const script = document.createElement('script');
+    let finished = false;
+
+    const cleanup = () => {
+      try { delete window[callbackName]; } catch (e) { window[callbackName] = undefined; }
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+
+    const finish = (ok, value) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      ok ? resolve(value) : reject(value instanceof Error ? value : new Error(String(value || 'Falha ao carregar dados.')));
+    };
+
+    window[callbackName] = (data) => finish(true, data);
+    script.onerror = () => finish(false, new Error('Não foi possível carregar os dados do servidor.'));
+    script.src = url + (url.includes('?') ? '&' : '?') +
+      'callback=' + encodeURIComponent(callbackName) + '&t=' + Date.now();
+
+    document.head.appendChild(script);
+
+    setTimeout(() => {
+      finish(false, new Error('Tempo esgotado ao carregar os dados.'));
+    }, 15000);
+  });
+}
+
+// Usa JSONP como primeira opção. Se algum navegador bloquear o script,
+// tenta o método por iframe como segunda opção.
+async function getData(url) {
+  try {
+    return await jsonpGet(url);
+  } catch (jsonpError) {
+    return await frameGet(url);
+  }
+}
+
 // Envia dados via um formulário invisível (em vez de fetch/POST direto).
 // Isso evita problemas de redirecionamento/CORS que o Apps Script pode ter com fetch.
 function formPost(url, params) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const iframeName = 'post_target_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
     const iframe = document.createElement('iframe');
     iframe.name = iframeName;
@@ -439,6 +482,8 @@ function formPost(url, params) {
 
     const form = document.createElement('form');
     form.method = 'POST';
+    form.enctype = 'application/x-www-form-urlencoded';
+    form.acceptCharset = 'UTF-8';
     form.action = url;
     form.target = iframeName;
     form.style.display = 'none';
@@ -447,21 +492,39 @@ function formPost(url, params) {
       const input = document.createElement('input');
       input.type = 'hidden';
       input.name = k;
-      input.value = params[k];
+      input.value = params[k] == null ? '' : String(params[k]);
       form.appendChild(input);
     });
 
-    document.body.appendChild(form);
-    form.submit();
-
+    let finished = false;
     const cleanup = () => {
+      window.removeEventListener('message', onMessage);
       if (form.parentNode) form.parentNode.removeChild(form);
       if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
     };
-    iframe.addEventListener('load', () => {
-      setTimeout(() => { cleanup(); resolve(true); }, 300);
-    });
-    setTimeout(() => { cleanup(); resolve(true); }, 7000);
+
+    const finish = (ok, data) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      if (ok) resolve(data || { ok: true });
+      else reject(new Error((data && data.error) || 'Falha ao salvar no servidor.'));
+    };
+
+    const onMessage = (event) => {
+      if (!event.data || event.data.__cifrasSave !== true) return;
+      finish(event.data.ok === true, event.data);
+    };
+
+    window.addEventListener('message', onMessage);
+    document.body.appendChild(form);
+    form.submit();
+
+    // Se o Apps Script não responder, não tratamos simplesmente como sucesso.
+    // Isso evita o falso "salvou" que existia antes.
+    setTimeout(() => {
+      finish(false, { error: 'O servidor não confirmou o salvamento dentro do tempo esperado.' });
+    }, 15000);
   });
 }
 
@@ -470,7 +533,7 @@ async function loadSongs() {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await wait(1500);
     try {
-      const data = await frameGet(API_URL + '?key=songs');
+      const data = await getData(API_URL + '?key=songs');
       const raw = Array.isArray(data) ? data : [];
       // proteção: ignora qualquer item que não seja uma cifra válida (ex: programações salvas por engano no lugar errado)
       songs = raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
@@ -492,9 +555,13 @@ async function loadSongs() {
 
 async function saveSongs() {
   try {
-    await formPost(API_URL, { key: 'songs', payload: JSON.stringify(songs) });
-    return true;
+    const result = await formPost(API_URL, {
+      key: 'songs',
+      payload: JSON.stringify(songs)
+    });
+    return result && result.ok === true;
   } catch (e) {
+    console.error('Erro ao salvar cifras:', e);
     return false;
   }
 }
@@ -503,7 +570,7 @@ async function saveSongs() {
 // e só então salva — evita que uma edição feita em outro aparelho seja apagada.
 async function fetchLatestSongs() {
   try {
-    const data = await frameGet(API_URL + '?key=songs');
+    const data = await getData(API_URL + '?key=songs');
     const raw = Array.isArray(data) ? data : [];
     return raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
   } catch (e) {
@@ -556,7 +623,7 @@ async function loadPrograms() {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await wait(1500);
     try {
-      const data = await frameGet(API_URL + '?key=programs');
+      const data = await getData(API_URL + '?key=programs');
       const raw = Array.isArray(data) ? data : [];
       programs = raw.filter(p => p && typeof p.name === 'string' && Array.isArray(p.songIds));
       programsLoaded = true;
@@ -571,9 +638,13 @@ async function loadPrograms() {
 
 async function savePrograms() {
   try {
-    await formPost(API_URL, { key: 'programs', payload: JSON.stringify(programs) });
-    return true;
+    const result = await formPost(API_URL, {
+      key: 'programs',
+      payload: JSON.stringify(programs)
+    });
+    return result && result.ok === true;
   } catch (e) {
+    console.error('Erro ao salvar programações:', e);
     return false;
   }
 }
