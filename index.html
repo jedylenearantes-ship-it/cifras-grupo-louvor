@@ -530,21 +530,20 @@ async function loadSongs() {
   if (currentView.mode === 'summary') renderMain();
 }
 
-async function saveSongs() {
+async function saveSongToServer(songObj) {
   try {
     const result = await formPost(API_URL, {
       key: 'songs',
-      payload: JSON.stringify(songs)
+      action: 'saveSong',
+      song: JSON.stringify(songObj)
     });
     return result && result.ok === true;
   } catch (e) {
-    console.error('Erro ao salvar cifras:', e);
+    console.error('Erro ao salvar cifra:', e);
     return false;
   }
 }
 
-// Busca a versão mais recente da planilha, aplica a alteração por cima dela,
-// e só então salva — evita que uma edição feita em outro aparelho seja apagada.
 async function fetchLatestSongs() {
   try {
     const data = await frameGet(API_URL + '?key=songs');
@@ -556,40 +555,38 @@ async function fetchLatestSongs() {
 }
 
 async function upsertSong(songObj) {
-  const latest = await fetchLatestSongs();
-  const idx = latest.findIndex(s => s.id === songObj.id);
-  if (idx !== -1) { latest[idx] = songObj; } else { latest.push(songObj); }
-  songs = latest;
-  await saveSongs();
+  const ok = await saveSongToServer(songObj);
+  if (!ok) return false;
   return await verifySongSaved(songObj);
-}
-
-// Confirma de verdade se a cifra ficou salva na planilha, buscando os dados
-// direto do servidor de novo (não confia só no "sucesso" do envio).
-function wait(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function verifySongSaved(songObj) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await wait(1800);
+    if (attempt > 0) await wait(1500);
     try {
       const check = await fetchLatestSongs();
       const found = check.find(s => s.id === songObj.id);
       if (found && found.title === songObj.title && found.body === songObj.body) return true;
-    } catch (e) {
-      // tenta de novo
-    }
+    } catch (e) {}
   }
   return false;
 }
 
 async function removeSong(id) {
-  const latest = await fetchLatestSongs();
-  songs = latest.filter(s => s.id !== id);
-  await saveSongs();
+  try {
+    const result = await formPost(API_URL, {
+      key: 'songs',
+      action: 'deleteSong',
+      id: id
+    });
+    if (!result || result.ok !== true) return false;
+  } catch (e) {
+    console.error('Erro ao excluir cifra:', e);
+    return false;
+  }
+
   for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await wait(1800);
+    if (attempt > 0) await wait(1500);
     const check = await fetchLatestSongs();
     if (!check.find(s => s.id === id)) return true;
   }
