@@ -427,49 +427,6 @@ function frameGet(url) {
   });
 }
 
-// Busca dados como JSONP. O Apps Script devolve JavaScript chamando a função
-// criada abaixo, evitando o bloqueio de CORS do GitHub Pages/Safari.
-function jsonpGet(url) {
-  return new Promise((resolve, reject) => {
-    const callbackName = 'cifrasCallback_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
-    const script = document.createElement('script');
-    let finished = false;
-
-    const cleanup = () => {
-      try { delete window[callbackName]; } catch (e) { window[callbackName] = undefined; }
-      if (script.parentNode) script.parentNode.removeChild(script);
-    };
-
-    const finish = (ok, value) => {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      ok ? resolve(value) : reject(value instanceof Error ? value : new Error(String(value || 'Falha ao carregar dados.')));
-    };
-
-    window[callbackName] = (data) => finish(true, data);
-    script.onerror = () => finish(false, new Error('Não foi possível carregar os dados do servidor.'));
-    script.src = url + (url.includes('?') ? '&' : '?') +
-      'callback=' + encodeURIComponent(callbackName) + '&t=' + Date.now();
-
-    document.head.appendChild(script);
-
-    setTimeout(() => {
-      finish(false, new Error('Tempo esgotado ao carregar os dados.'));
-    }, 15000);
-  });
-}
-
-// Usa JSONP como primeira opção. Se algum navegador bloquear o script,
-// tenta o método por iframe como segunda opção.
-async function getData(url) {
-  try {
-    return await jsonpGet(url);
-  } catch (jsonpError) {
-    return await frameGet(url);
-  }
-}
-
 // Envia dados via um formulário invisível (em vez de fetch/POST direto).
 // Isso evita problemas de redirecionamento/CORS que o Apps Script pode ter com fetch.
 function formPost(url, params) {
@@ -500,6 +457,7 @@ function formPost(url, params) {
 
     const cleanup = () => {
       if (timer) clearTimeout(timer);
+      window.removeEventListener('message', onMessage);
       if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
       if (form.parentNode) form.parentNode.removeChild(form);
     };
@@ -509,15 +467,23 @@ function formPost(url, params) {
       finished = true;
       cleanup();
       if (ok) resolve(data || { ok: true });
-      else reject(new Error((data && data.error) || 'Falha ao enviar os dados para o servidor.'));
+      else reject(new Error((data && data.error) || 'Falha ao salvar no servidor.'));
     };
 
-    // O Apps Script pode redirecionar a resposta para script.googleusercontent.com.
-    // Por isso não dependemos de ler a resposta do iframe nem de postMessage.
-    // O evento load apenas confirma que o POST terminou; o código de salvamento
-    // faz uma nova leitura da planilha para confirmar que os dados realmente foram gravados.
+    const onMessage = (event) => {
+      if (event.source !== iframe.contentWindow) return;
+      if (!event.data || event.data.__cifrasSave !== true) return;
+      finish(event.data.ok === true, event.data);
+    };
+
+    window.addEventListener('message', onMessage);
+
     iframe.addEventListener('load', () => {
-      setTimeout(() => finish(true, { ok: true }), 700);
+      // O Apps Script pode redirecionar antes de executar o HTML de resposta.
+      // Damos um pequeno prazo para o postMessage chegar.
+      setTimeout(() => {
+        if (!finished) finish(true, { ok: true });
+      }, 1200);
     });
 
     document.body.appendChild(iframe);
@@ -526,7 +492,7 @@ function formPost(url, params) {
 
     timer = setTimeout(() => {
       finish(false, { error: 'O servidor demorou demais para responder ao salvamento.' });
-    }, 15000);
+    }, 20000);
   });
 }
 
@@ -535,7 +501,7 @@ async function loadSongs() {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await wait(1500);
     try {
-      const data = await getData(API_URL + '?key=songs');
+      const data = await frameGet(API_URL + '?key=songs');
       const raw = Array.isArray(data) ? data : [];
       // proteção: ignora qualquer item que não seja uma cifra válida (ex: programações salvas por engano no lugar errado)
       songs = raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
@@ -556,76 +522,73 @@ async function loadSongs() {
 }
 
 async function saveSongs() {
+  // Mantido para compatibilidade com outras partes do sistema.
+  // Novas cifras não usam mais este método: enviam somente a cifra alterada.
   try {
-    const result = await formPost(API_URL, {
-      key: 'songs',
-      payload: JSON.stringify(songs)
-    });
-    return result && result.ok === true;
+    await formPost(API_URL, { key: 'songs', action: 'saveAllSongs', payload: JSON.stringify(songs) });
+    return true;
   } catch (e) {
     console.error('Erro ao salvar cifras:', e);
     return false;
   }
 }
 
-// Busca a versão mais recente da planilha, aplica a alteração por cima dela,
-// e só então salva — evita que uma edição feita em outro aparelho seja apagada.
-async function fetchLatestSongs() {
+async function upsertSong(songObj) {
   try {
-    const data = await getData(API_URL + '?key=songs');
-    const raw = Array.isArray(data) ? data : [];
-    return raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
+    // IMPORTANTE: envia somente esta cifra. O backend lê a lista atual da planilha
+    // e faz o merge sob LockService, preservando as outras cifras.
+    await formPost(API_URL, {
+      key: 'songs',
+      action: 'saveSong',
+      song: JSON.stringify(songObj)
+    });
+
+    const idx = songs.findIndex(s => s.id === songObj.id);
+    if (idx !== -1) songs[idx] = songObj;
+    else songs.push(songObj);
+
+    return true;
   } catch (e) {
-    return songs.slice();
+    console.error('Erro ao salvar cifra:', e);
+    return false;
   }
 }
 
-async function upsertSong(songObj) {
-  const latest = await fetchLatestSongs();
-  const idx = latest.findIndex(s => s.id === songObj.id);
-  if (idx !== -1) { latest[idx] = songObj; } else { latest.push(songObj); }
-  songs = latest;
-  await saveSongs();
-  return await verifySongSaved(songObj);
-}
-
-// Confirma de verdade se a cifra ficou salva na planilha, buscando os dados
-// direto do servidor de novo (não confia só no "sucesso" do envio).
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function verifySongSaved(songObj) {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await wait(1800);
-    try {
-      const check = await fetchLatestSongs();
-      const found = check.find(s => s.id === songObj.id);
-      if (found && found.title === songObj.title && found.body === songObj.body) return true;
-    } catch (e) {
-      // tenta de novo
-    }
+  try {
+    const check = await fetchLatestSongs();
+    const found = check.find(s => s.id === songObj.id);
+    return !!(found && found.title === songObj.title && found.body === songObj.body);
+  } catch (e) {
+    return false;
   }
-  return false;
 }
 
 async function removeSong(id) {
-  const latest = await fetchLatestSongs();
-  songs = latest.filter(s => s.id !== id);
-  await saveSongs();
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await wait(1800);
-    const check = await fetchLatestSongs();
-    if (!check.find(s => s.id === id)) return true;
+  try {
+    await formPost(API_URL, {
+      key: 'songs',
+      action: 'deleteSong',
+      id: id
+    });
+
+    songs = songs.filter(s => s.id !== id);
+    return true;
+  } catch (e) {
+    console.error('Erro ao excluir cifra:', e);
+    return false;
   }
-  return false;
 }
 
 async function loadPrograms() {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await wait(1500);
     try {
-      const data = await getData(API_URL + '?key=programs');
+      const data = await frameGet(API_URL + '?key=programs');
       const raw = Array.isArray(data) ? data : [];
       programs = raw.filter(p => p && typeof p.name === 'string' && Array.isArray(p.songIds));
       programsLoaded = true;
@@ -640,13 +603,9 @@ async function loadPrograms() {
 
 async function savePrograms() {
   try {
-    const result = await formPost(API_URL, {
-      key: 'programs',
-      payload: JSON.stringify(programs)
-    });
-    return result && result.ok === true;
+    await formPost(API_URL, { key: 'programs', payload: JSON.stringify(programs) });
+    return true;
   } catch (e) {
-    console.error('Erro ao salvar programações:', e);
     return false;
   }
 }
