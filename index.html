@@ -510,7 +510,7 @@ async function loadSongs() {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await wait(1500);
     try {
-      const data = await getData(API_URL + '?key=songs');
+      const data = await frameGet(API_URL + '?key=songs');
       const raw = Array.isArray(data) ? data : [];
       // proteção: ignora qualquer item que não seja uma cifra válida (ex: programações salvas por engano no lugar errado)
       songs = raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
@@ -547,7 +547,7 @@ async function saveSongs() {
 // e só então salva — evita que uma edição feita em outro aparelho seja apagada.
 async function fetchLatestSongs() {
   try {
-    const data = await getData(API_URL + '?key=songs');
+    const data = await frameGet(API_URL + '?key=songs');
     const raw = Array.isArray(data) ? data : [];
     return raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
   } catch (e) {
@@ -600,7 +600,7 @@ async function loadPrograms() {
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await wait(1500);
     try {
-      const data = await getData(API_URL + '?key=programs');
+      const data = await frameGet(API_URL + '?key=programs');
       const raw = Array.isArray(data) ? data : [];
       programs = raw.filter(p => p && typeof p.name === 'string' && Array.isArray(p.songIds));
       programsLoaded = true;
