@@ -382,7 +382,7 @@ if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
-const API_URL = 'https://script.google.com/macros/s/AKfycbzIzre_hoCd0Xq6bKQkXJvMz0ssWVuD5KGmOYW5j7wLY_SxBZagGgXqtqTx4UTNY5K0IA/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwQiUEfJTxGrU8MNwRPGYMxoZTxUFdNs5WdmAuBZG9yqs594Jvl78JZ_fKD4IZ0rY1f/exec';
 const ADMIN_PASSWORD = 'louvor2026'; // troque essa senha aqui no código quando quiser
 const CATEGORIES = ['Gerais', 'Ceia', 'Irmãs', 'Jovens', 'Crianças'];
 
@@ -430,16 +430,15 @@ function frameGet(url) {
 // Envia dados via um formulário invisível (em vez de fetch/POST direto).
 // Isso evita problemas de redirecionamento/CORS que o Apps Script pode ter com fetch.
 function formPost(url, params) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const iframeName = 'post_target_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
     const iframe = document.createElement('iframe');
     iframe.name = iframeName;
     iframe.style.display = 'none';
+    document.body.appendChild(iframe);
 
     const form = document.createElement('form');
     form.method = 'POST';
-    form.enctype = 'application/x-www-form-urlencoded';
-    form.acceptCharset = 'UTF-8';
     form.action = url;
     form.target = iframeName;
     form.style.display = 'none';
@@ -448,51 +447,21 @@ function formPost(url, params) {
       const input = document.createElement('input');
       input.type = 'hidden';
       input.name = k;
-      input.value = params[k] == null ? '' : String(params[k]);
+      input.value = params[k];
       form.appendChild(input);
     });
 
-    let finished = false;
-    let timer = null;
-
-    const cleanup = () => {
-      if (timer) clearTimeout(timer);
-      window.removeEventListener('message', onMessage);
-      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-      if (form.parentNode) form.parentNode.removeChild(form);
-    };
-
-    const finish = (ok, data) => {
-      if (finished) return;
-      finished = true;
-      cleanup();
-      if (ok) resolve(data || { ok: true });
-      else reject(new Error((data && data.error) || 'Falha ao salvar no servidor.'));
-    };
-
-    const onMessage = (event) => {
-      if (event.source !== iframe.contentWindow) return;
-      if (!event.data || event.data.__cifrasSave !== true) return;
-      finish(event.data.ok === true, event.data);
-    };
-
-    window.addEventListener('message', onMessage);
-
-    iframe.addEventListener('load', () => {
-      // O Apps Script pode redirecionar antes de executar o HTML de resposta.
-      // Damos um pequeno prazo para o postMessage chegar.
-      setTimeout(() => {
-        if (!finished) finish(true, { ok: true });
-      }, 1200);
-    });
-
-    document.body.appendChild(iframe);
     document.body.appendChild(form);
     form.submit();
 
-    timer = setTimeout(() => {
-      finish(false, { error: 'O servidor demorou demais para responder ao salvamento.' });
-    }, 20000);
+    const cleanup = () => {
+      if (form.parentNode) form.parentNode.removeChild(form);
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    };
+    iframe.addEventListener('load', () => {
+      setTimeout(() => { cleanup(); resolve(true); }, 300);
+    });
+    setTimeout(() => { cleanup(); resolve(true); }, 7000);
   });
 }
 
@@ -522,66 +491,65 @@ async function loadSongs() {
 }
 
 async function saveSongs() {
-  // Mantido para compatibilidade com outras partes do sistema.
-  // Novas cifras não usam mais este método: enviam somente a cifra alterada.
   try {
-    await formPost(API_URL, { key: 'songs', action: 'saveAllSongs', payload: JSON.stringify(songs) });
+    await formPost(API_URL, { key: 'songs', payload: JSON.stringify(songs) });
     return true;
   } catch (e) {
-    console.error('Erro ao salvar cifras:', e);
     return false;
+  }
+}
+
+// Busca a versão mais recente da planilha, aplica a alteração por cima dela,
+// e só então salva — evita que uma edição feita em outro aparelho seja apagada.
+async function fetchLatestSongs() {
+  try {
+    const data = await frameGet(API_URL + '?key=songs');
+    const raw = Array.isArray(data) ? data : [];
+    return raw.filter(s => s && typeof s.title === 'string' && typeof s.body === 'string');
+  } catch (e) {
+    return songs.slice();
   }
 }
 
 async function upsertSong(songObj) {
-  try {
-    // IMPORTANTE: envia somente esta cifra. O backend lê a lista atual da planilha
-    // e faz o merge sob LockService, preservando as outras cifras.
-    await formPost(API_URL, {
-      key: 'songs',
-      action: 'saveSong',
-      song: JSON.stringify(songObj)
-    });
-
-    const idx = songs.findIndex(s => s.id === songObj.id);
-    if (idx !== -1) songs[idx] = songObj;
-    else songs.push(songObj);
-
-    return true;
-  } catch (e) {
-    console.error('Erro ao salvar cifra:', e);
-    return false;
-  }
+  const latest = await fetchLatestSongs();
+  const idx = latest.findIndex(s => s.id === songObj.id);
+  if (idx !== -1) { latest[idx] = songObj; } else { latest.push(songObj); }
+  songs = latest;
+  await saveSongs();
+  return await verifySongSaved(songObj);
 }
 
+// Confirma de verdade se a cifra ficou salva na planilha, buscando os dados
+// direto do servidor de novo (não confia só no "sucesso" do envio).
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function verifySongSaved(songObj) {
-  try {
-    const check = await fetchLatestSongs();
-    const found = check.find(s => s.id === songObj.id);
-    return !!(found && found.title === songObj.title && found.body === songObj.body);
-  } catch (e) {
-    return false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await wait(1800);
+    try {
+      const check = await fetchLatestSongs();
+      const found = check.find(s => s.id === songObj.id);
+      if (found && found.title === songObj.title && found.body === songObj.body) return true;
+    } catch (e) {
+      // tenta de novo
+    }
   }
+  return false;
 }
 
 async function removeSong(id) {
-  try {
-    await formPost(API_URL, {
-      key: 'songs',
-      action: 'deleteSong',
-      id: id
-    });
-
-    songs = songs.filter(s => s.id !== id);
-    return true;
-  } catch (e) {
-    console.error('Erro ao excluir cifra:', e);
-    return false;
+  const latest = await fetchLatestSongs();
+  songs = latest.filter(s => s.id !== id);
+  await saveSongs();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await wait(1800);
+    const check = await fetchLatestSongs();
+    if (!check.find(s => s.id === id)) return true;
   }
+  return false;
 }
 
 async function loadPrograms() {
