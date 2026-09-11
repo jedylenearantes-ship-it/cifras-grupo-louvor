@@ -430,7 +430,7 @@ function frameGet(url) {
 // Envia dados via um formulário invisível (em vez de fetch/POST direto).
 // Isso evita problemas de redirecionamento/CORS que o Apps Script pode ter com fetch.
 function formPost(url, params) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const iframeName = 'post_target_' + Date.now() + '_' + Math.floor(Math.random() * 100000);
     const iframe = document.createElement('iframe');
     iframe.name = iframeName;
@@ -439,6 +439,8 @@ function formPost(url, params) {
 
     const form = document.createElement('form');
     form.method = 'POST';
+    form.enctype = 'application/x-www-form-urlencoded';
+    form.acceptCharset = 'UTF-8';
     form.action = url;
     form.target = iframeName;
     form.style.display = 'none';
@@ -447,21 +449,39 @@ function formPost(url, params) {
       const input = document.createElement('input');
       input.type = 'hidden';
       input.name = k;
-      input.value = params[k];
+      input.value = params[k] == null ? '' : String(params[k]);
       form.appendChild(input);
     });
 
-    document.body.appendChild(form);
-    form.submit();
-
+    let finished = false;
     const cleanup = () => {
+      window.removeEventListener('message', onMessage);
       if (form.parentNode) form.parentNode.removeChild(form);
       if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
     };
-    iframe.addEventListener('load', () => {
-      setTimeout(() => { cleanup(); resolve(true); }, 300);
-    });
-    setTimeout(() => { cleanup(); resolve(true); }, 7000);
+
+    const finish = (ok, data) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      if (ok) resolve(data || { ok: true });
+      else reject(new Error((data && data.error) || 'Falha ao salvar no servidor.'));
+    };
+
+    const onMessage = (event) => {
+      if (!event.data || event.data.__cifrasSave !== true) return;
+      finish(event.data.ok === true, event.data);
+    };
+
+    window.addEventListener('message', onMessage);
+    document.body.appendChild(form);
+    form.submit();
+
+    // Se o Apps Script não responder, não tratamos simplesmente como sucesso.
+    // Isso evita o falso "salvou" que existia antes.
+    setTimeout(() => {
+      finish(false, { error: 'O servidor não confirmou o salvamento dentro do tempo esperado.' });
+    }, 15000);
   });
 }
 
@@ -492,9 +512,13 @@ async function loadSongs() {
 
 async function saveSongs() {
   try {
-    await formPost(API_URL, { key: 'songs', payload: JSON.stringify(songs) });
-    return true;
+    const result = await formPost(API_URL, {
+      key: 'songs',
+      payload: JSON.stringify(songs)
+    });
+    return result && result.ok === true;
   } catch (e) {
+    console.error('Erro ao salvar cifras:', e);
     return false;
   }
 }
@@ -571,9 +595,13 @@ async function loadPrograms() {
 
 async function savePrograms() {
   try {
-    await formPost(API_URL, { key: 'programs', payload: JSON.stringify(programs) });
-    return true;
+    const result = await formPost(API_URL, {
+      key: 'programs',
+      payload: JSON.stringify(programs)
+    });
+    return result && result.ok === true;
   } catch (e) {
+    console.error('Erro ao salvar programações:', e);
     return false;
   }
 }
